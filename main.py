@@ -1,9 +1,12 @@
-import fastapi
+from fastapi import FastAPI, HTTPException
 
-def main():
-    print("Hello from hw1-basic-kv-store!")
+app = FastAPI()
+kv_store = {} # in-memory key-value store
+# we can save this to a file for persistence if needed
 
-
-if __name__ == "__main__":
-    main()
+@app.get("")
+async def set_key_value(key: str, value: str):
+    # concurrency / locking
+    kv_store[key] = value
+    return {"message": f"Key '{key}' set successfully."}
 
