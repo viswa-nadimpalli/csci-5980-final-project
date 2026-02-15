@@ -5,6 +5,7 @@ import logging
 import json
 import os
 import atexit
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -103,19 +104,24 @@ async def on_shutdown():
         except asyncio.CancelledError:
             pass
 
+# ---- JSON PARSING FOR GET ENDPOINT ----
+class ValueRequest(BaseModel):
+    value: str
 
 # ---- API ENDPOINTS ----
-@app.post("/{key}")
-async def put_key_value(key: str, value: str):
+@app.post("/key_{key}")
+async def put_key_value(key: str, body: ValueRequest):
     # concurrency / locking
-    async with get_lock_for_key(key):
-        kv_store[key] = value
-    logger.info(f"PUT key='{key}' value='{value}'")
+    lock = await get_lock_for_key(key)
+    async with lock:
+        kv_store[key] = body.value
+    logger.info(f"PUT key='{key}' value='{body.value}'")
     return {"message": f"Key '{key}' set successfully."}
 
-@app.get("/{key}")
+@app.get("/key_{key}")
 async def get_key_value(key: str):
-    async with get_lock_for_key(key):
+    lock = await get_lock_for_key(key)
+    async with lock:
         if key not in kv_store:
             logger.info(f"GET key='{key}' miss")
             raise HTTPException(status_code=404, detail=f"Key '{key}' not found.")
@@ -123,9 +129,10 @@ async def get_key_value(key: str):
     logger.info(f"GET key='{key}' value='{value}'")
     return {"key": key, "value": value}
 
-@app.delete("/{key}")
+@app.delete("/key_{key}")
 async def delete_key_value(key: str):
-    async with get_lock_for_key(key):
+    lock = await get_lock_for_key(key) # need to await to avoid race condition
+    async with lock:
         if key not in kv_store:
             raise HTTPException(status_code=404, detail=f"Key '{key}' not found.")
         del kv_store[key]
