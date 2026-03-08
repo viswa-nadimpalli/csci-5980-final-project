@@ -1,13 +1,12 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, String, ForeignKey, DateTime, Enum, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .db import Base 
 from datetime import datetime, timezone
 
-class GroupRole(str, enum.Enum):
-    owner = "owner"
+class PackRole(str, enum.Enum):
     contributor = "contributor"
     viewer = "viewer"
 
@@ -24,39 +23,45 @@ class User(Base):
 
     identities = relationship("UserIdentities", back_populates="user", cascade="all, delete-orphan")
 
-    memberships = relationship("GroupMembership", back_populates="user", cascade="all, delete-orphan")
+    owned_packs = relationship("StickerPack", back_populates="owner", foreign_keys="StickerPack.owner_id")
+    memberships = relationship("PackMembership", back_populates="user", cascade="all, delete-orphan")
     images = relationship("Image", back_populates="uploader")
 
-class Group(Base):
-    __tablename__ = "groups"
+class StickerPack(Base):
+    __tablename__ = "sticker_packs"
+
+    __table_args__ = (UniqueConstraint("name", "owner_id", name="uq_pack_name_owner"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
-    memberships = relationship("GroupMembership", back_populates="group", cascade="all, delete-orphan")
-    images = relationship("Image", back_populates="group")
+    owner = relationship("User", back_populates="owned_packs", foreign_keys=[owner_id])
+    memberships = relationship("PackMembership", back_populates="pack", cascade="all, delete-orphan")
+    images = relationship("Image", back_populates="pack")
 
-class GroupMembership(Base):
-    __tablename__ = "group_memberships"
+class PackMembership(Base):
+    __tablename__ = "pack_memberships"
 
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
-    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), primary_key=True)
-    role = Column(Enum(GroupRole), nullable=False)
+    pack_id = Column(UUID(as_uuid=True), ForeignKey("sticker_packs.id"), primary_key=True)
+    role = Column(Enum(PackRole), nullable=False)
 
     user = relationship("User", back_populates="memberships")
-    group = relationship("Group", back_populates="memberships")
+    pack = relationship("StickerPack", back_populates="memberships")
 
 class Image(Base):
     __tablename__ = "images"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    group_id = Column(UUID(as_uuid=True), ForeignKey("groups.id"), nullable=False)
-    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    pack_id = Column(UUID(as_uuid=True), ForeignKey("sticker_packs.id"), nullable=False)
+    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     s3_key = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
-    group = relationship("Group", back_populates="images")
+    pack = relationship("StickerPack", back_populates="images")
     uploader = relationship("User", back_populates="images")
 
 class UserIdentities(Base):
@@ -70,13 +75,6 @@ class UserIdentities(Base):
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
-    user = relationship("User", back_populates="identities")
+    __table_args__ = (UniqueConstraint("provider", "provider_sub", name="uq_identity_provider_sub"),)
 
-# CREATE TABLE IF NOT EXISTS user_identities (
-#     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-#     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-#     provider        TEXT NOT NULL,             -- e.g., "google", "apple"
-#     provider_sub    TEXT NOT NULL,             -- provider subject/id
-#     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-#     UNIQUE(provider, provider_sub)
-# );
+    user = relationship("User", back_populates="identities")

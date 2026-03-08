@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.db import get_db
-from core.models import User, Group, GroupMembership, GroupRole
+from core.models import User
 
 router = APIRouter(prefix="/users", tags=["users"])
 
