@@ -79,6 +79,29 @@ def get_pack(
     _require_role(requester_id, pack, db, "owner", "contributor", "viewer")
     return pack
 
+@router.get("", response_model=list[PackOut])
+def list_packs(
+    requester_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+):
+    memberships = (
+        db.query(PackMembership)
+        .filter(PackMembership.user_id == requester_id)
+        .all()
+    )
+
+    pack_ids = [m.pack_id for m in memberships]
+
+    if not pack_ids:
+        return []
+
+    packs = (
+        db.query(StickerPack)
+        .filter(StickerPack.id.in_(pack_ids))
+        .all()
+    )
+
+    return packs
 
 @router.delete("/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_pack(
