@@ -3,9 +3,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from core.db import get_db
-from core.models import PackMembership, PackRole, StickerPack
+from core.models import PackMembership, PackRole, StickerPack, User
 
 router = APIRouter(prefix="/packs", tags=["packs"])
 
@@ -60,7 +61,11 @@ class TransferOwnership(BaseModel):
 def create_pack(payload: PackCreate, db: Session = Depends(get_db)):
     pack = StickerPack(name=payload.name, description=payload.description, owner_id=payload.owner_id)
     db.add(pack)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="You already have a pack with that name")
     db.refresh(pack)
     return pack
 
@@ -99,6 +104,9 @@ def add_member(
 
     if payload.user_id == pack.owner_id:
         raise HTTPException(status_code=409, detail="User is already the owner of this pack")
+
+    if not db.get(User, payload.user_id):
+        raise HTTPException(status_code=404, detail="User not found")
 
     existing = db.get(PackMembership, (payload.user_id, pack_id))
     if existing:
@@ -140,16 +148,20 @@ def transfer_ownership(
     if payload.new_owner_id == pack.owner_id:
         raise HTTPException(status_code=409, detail="User is already the owner")
 
-    # If the new owner has an existing membership, remove it (they'll be owner via FK)
+    if not db.get(User, payload.new_owner_id):
+        raise HTTPException(status_code=404, detail="New owner user not found")
+
+    # if the new owner has an existing membership, remove it (they'll be owner via FK)
     existing = db.get(PackMembership, (payload.new_owner_id, pack_id))
     if existing:
         db.delete(existing)
 
-    # Demote current owner to contributor
-    old_owner_membership = PackMembership(
-        user_id=pack.owner_id, pack_id=pack_id, role=PackRole.contributor
-    )
-    db.add(old_owner_membership)
+    # demote current owner to contributor
+    old_owner_membership = db.get(PackMembership, (pack.owner_id, pack_id))
+    if old_owner_membership:
+        old_owner_membership.role = PackRole.contributor
+    else:
+        db.add(PackMembership(user_id=pack.owner_id, pack_id=pack_id, role=PackRole.contributor))
 
     pack.owner_id = payload.new_owner_id
     db.commit()

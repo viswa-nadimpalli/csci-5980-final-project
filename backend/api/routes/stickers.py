@@ -36,7 +36,7 @@ def _effective_role(db: Session, user_id: UUID, pack_id: UUID) -> str | None:
     """Return 'owner', 'contributor', 'viewer', or None"""
     pack = db.get(StickerPack, pack_id)
     if not pack:
-        return None
+        raise HTTPException(status_code=404, detail="Pack not found")
     if pack.owner_id == user_id:
         return "owner"
     membership = db.get(PackMembership, (user_id, pack_id))

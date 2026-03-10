@@ -55,7 +55,7 @@ class Image(Base):
     __tablename__ = "images"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    pack_id = Column(UUID(as_uuid=True), ForeignKey("sticker_packs.id"), nullable=False)
+    pack_id = Column(UUID(as_uuid=True), ForeignKey("sticker_packs.id", ondelete="CASCADE"), nullable=False)
     uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     s3_key = Column(String, nullable=False)
