@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct ContentView: View {
     @State private var userID = "4146544a-0464-42bd-b14e-6185b1e75f9a"
@@ -184,7 +185,10 @@ private struct PacksDashboardView: View {
                         LazyVGrid(columns: columns, spacing: 18) {
                             ForEach($packs) { $pack in
                                 NavigationLink {
-                                    PackEditorView(pack: $pack)
+                                    PackEditorView(
+                                        userID: userID,
+                                        pack: $pack
+                                    )
                                 } label: {
                                     PackCardView(pack: pack)
                                 }
@@ -281,7 +285,13 @@ private struct PackCardView: View {
 }
 
 private struct PackEditorView: View {
+    let userID: String
     @Binding var pack: Pack
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var isLoadingStickers = false
+    @State private var isUploadingSticker = false
+    @State private var isDeletingStickerID: String?
+    @State private var stickerActionError: String?
 
     var body: some View {
         Form {
@@ -296,14 +306,57 @@ private struct PackEditorView: View {
                 LabeledContent("Owner ID", value: pack.ownerId)
             }
 
-            Section {
-                Text("Edits currently update the pack in local app state. You can connect this screen to a backend update endpoint later without changing the UI structure.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            Section("Stickers") {
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Label(
+                        isUploadingSticker ? "Uploading..." : "Upload Sticker",
+                        systemImage: "square.and.arrow.up"
+                    )
+                }
+                .disabled(isUploadingSticker || isDeletingStickerID != nil)
+
+                if let stickerActionError {
+                    Text(stickerActionError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
+                if isLoadingStickers && stickers.isEmpty {
+                    HStack {
+                        Spacer()
+                        ProgressView("Loading stickers...")
+                        Spacer()
+                    }
+                } else if stickers.isEmpty {
+                    ContentUnavailableView(
+                        "No Stickers Yet",
+                        systemImage: "photo.on.rectangle",
+                        description: Text("Upload a sticker to start building this pack.")
+                    )
+                } else {
+                    ForEach(stickers) { sticker in
+                        StickerRowView(
+                            sticker: sticker,
+                            isDeleting: isDeletingStickerID == sticker.id,
+                            onDelete: {
+                                await deleteSticker(sticker)
+                            }
+                        )
+                    }
+                }
             }
+
+    
         }
         .navigationTitle(pack.name)
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: pack.id) {
+            await loadStickers()
+        }
+        .task(id: selectedPhotoItem) {
+            guard let selectedPhotoItem else { return }
+            await uploadSticker(from: selectedPhotoItem)
+        }
     }
 
     private var descriptionBinding: Binding<String> {
@@ -315,6 +368,137 @@ private struct PackEditorView: View {
             }
         )
 
+    }
+
+    private var stickers: [Sticker] {
+        pack.stickers ?? []
+    }
+
+    private func loadStickers() async {
+        guard !isLoadingStickers else { return }
+
+        isLoadingStickers = true
+        stickerActionError = nil
+        defer { isLoadingStickers = false }
+
+        do {
+            pack.stickers = try await APIClient.shared.fetchStickers(
+                packID: pack.id,
+                userID: userID
+            )
+        } catch {
+            stickerActionError = error.localizedDescription
+        }
+    }
+
+    private func uploadSticker(from item: PhotosPickerItem) async {
+        guard !isUploadingSticker else { return }
+
+        isUploadingSticker = true
+        stickerActionError = nil
+        defer {
+            isUploadingSticker = false
+            selectedPhotoItem = nil
+        }
+
+        do {
+            guard let imageData = try await item.loadTransferable(type: Data.self) else {
+                throw UploadError.invalidImageData
+            }
+
+            let createdSticker = try await APIClient.shared.uploadSticker(
+                packID: pack.id,
+                userID: userID,
+                imageData: imageData
+            )
+
+            if pack.stickers == nil {
+                pack.stickers = []
+            }
+            pack.stickers?.insert(createdSticker, at: 0)
+        } catch {
+            stickerActionError = error.localizedDescription
+        }
+    }
+
+    private func deleteSticker(_ sticker: Sticker) async {
+        guard isDeletingStickerID == nil else { return }
+
+        isDeletingStickerID = sticker.id
+        stickerActionError = nil
+        defer { isDeletingStickerID = nil }
+
+        do {
+            try await APIClient.shared.deleteSticker(
+                stickerID: sticker.id,
+                userID: userID
+            )
+            pack.stickers?.removeAll { $0.id == sticker.id }
+        } catch {
+            stickerActionError = error.localizedDescription
+        }
+    }
+}
+
+private struct StickerRowView: View {
+    let sticker: Sticker
+    let isDeleting: Bool
+    let onDelete: () async -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: sticker.downloadURL.flatMap(URL.init(string:))) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(.secondarySystemBackground))
+                    .overlay {
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+            .frame(width: 56, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(sticker.id)
+                    .font(.footnote.monospaced())
+                    .lineLimit(1)
+
+                Text(sticker.uploadedBy)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button(role: .destructive) {
+                Task {
+                    await onDelete()
+                }
+            } label: {
+                if isDeleting {
+                    ProgressView()
+                } else {
+                    Image(systemName: "trash")
+                }
+            }
+            .disabled(isDeleting)
+        }
+    }
+}
+
+private enum UploadError: LocalizedError {
+    case invalidImageData
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidImageData:
+            return "The selected image couldn't be loaded."
+        }
     }
 }
 

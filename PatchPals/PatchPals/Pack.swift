@@ -5,12 +5,14 @@ struct Pack: Identifiable, Codable {
     var name: String
     var description: String?
     let ownerId: String
+    var stickers: [Sticker]?
 
     enum CodingKeys: String, CodingKey {
         case id
         case name
         case description
         case ownerId = "owner_id"
+        case stickers
     }
 }
 
