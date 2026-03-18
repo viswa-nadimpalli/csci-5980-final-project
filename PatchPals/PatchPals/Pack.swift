@@ -2,8 +2,8 @@ import Foundation
 
 struct Pack: Identifiable, Codable {
     let id: String
-    let name: String
-    let description: String?
+    var name: String
+    var description: String?
     let ownerId: String
 
     enum CodingKeys: String, CodingKey {
