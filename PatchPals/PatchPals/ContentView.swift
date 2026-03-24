@@ -72,7 +72,7 @@ private struct LoginView: View {
     @State private var tab: LoginTab = .signIn
 
     // Sign in
-    @State private var userID = SessionStore.loggedInUserID ?? "4146544a-0464-42bd-b14e-6185b1e75f9a"
+    @State private var userID = SessionStore.loggedInUserID ?? ""
     @State private var signInError: String?
 
     // Create account
