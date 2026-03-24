@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from core.db import get_db
@@ -58,8 +59,15 @@ class TransferOwnership(BaseModel):
     new_owner_id: UUID
 
 @router.post("", response_model=PackOut, status_code=status.HTTP_201_CREATED)
-def create_pack(payload: PackCreate, db: Session = Depends(get_db)):
-    pack = StickerPack(name=payload.name, description=payload.description, owner_id=payload.owner_id)
+def create_pack(
+    payload: PackCreate,
+    db: Session = Depends(get_db),
+):
+    pack = StickerPack(
+        name=payload.name,
+        description=payload.description,
+        owner_id=payload.owner_id,
+    )
     db.add(pack)
     try:
         db.commit()
@@ -79,6 +87,37 @@ def get_pack(
     _require_role(requester_id, pack, db, "owner", "contributor", "viewer")
     return pack
 
+@router.get("", response_model=list[PackOut])
+def list_packs(
+    requester_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+):
+    if not db.get(User, requester_id):
+        raise HTTPException(status_code=404, detail="User not found")
+
+    requester_hex = requester_id.hex
+
+    membership_pack_ids = (
+        db.query(PackMembership.pack_id)
+        .filter(PackMembership.user_id == requester_id)
+    )
+
+    packs = (
+        db.query(StickerPack)
+        .filter(
+            or_(
+                StickerPack.owner_id == requester_id,
+                # Fallback compare for deployments where UUID may be surfaced
+                # as text with formatting differences.
+                func.lower(func.replace(cast(StickerPack.owner_id, String), "-", "")) == requester_hex,
+                StickerPack.id.in_(membership_pack_ids),
+            )
+        )
+        .order_by(StickerPack.name.asc(), StickerPack.id.asc())
+        .all()
+    )
+
+    return packs
 
 @router.delete("/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_pack(
