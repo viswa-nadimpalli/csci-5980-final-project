@@ -39,7 +39,7 @@ class StickerPack(Base):
 
     owner = relationship("User", back_populates="owned_packs", foreign_keys=[owner_id])
     memberships = relationship("PackMembership", back_populates="pack", cascade="all, delete-orphan")
-    images = relationship("Image", back_populates="pack")
+    images = relationship("Image", back_populates="pack", cascade="all, delete-orphan")
 
 class PackMembership(Base):
     __tablename__ = "pack_memberships"
