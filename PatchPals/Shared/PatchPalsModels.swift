@@ -6,8 +6,10 @@ enum PackRole: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .contributor: return "Contributor"
-        case .viewer: return "Viewer"
+        case .contributor:
+            return "Contributor"
+        case .viewer:
+            return "Viewer"
         }
     }
 }

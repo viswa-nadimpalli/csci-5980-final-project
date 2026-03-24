@@ -6,14 +6,68 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		47C31F2C2F73474800FDFFDD /* Messages.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 47C31F2B2F73474800FDFFDD /* Messages.framework */; };
+		47C31F382F73474A00FDFFDD /* PatchPalsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 47C31F292F73474800FDFFDD /* PatchPalsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		47C31F362F73474A00FDFFDD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 47834B5D2F5E1ED500AB72C3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 47C31F282F73474800FDFFDD;
+			remoteInfo = PatchPalsExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		47C31F392F73474A00FDFFDD /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				47C31F382F73474A00FDFFDD /* PatchPalsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		47834B652F5E1ED500AB72C3 /* PatchPals.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PatchPals.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		47C31F292F73474800FDFFDD /* PatchPalsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PatchPalsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		47C31F2B2F73474800FDFFDD /* Messages.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Messages.framework; path = System/Library/Frameworks/Messages.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		47C31F3C2F73474A00FDFFDD /* Exceptions for "PatchPalsExtension" folder in "PatchPalsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 47C31F282F73474800FDFFDD /* PatchPalsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		47834B672F5E1ED500AB72C3 /* PatchPals */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = PatchPals;
+			sourceTree = "<group>";
+		};
+		47834B732F5E1ED500AB72C3 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		47C31F2D2F73474800FDFFDD /* PatchPalsExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				47C31F3C2F73474A00FDFFDD /* Exceptions for "PatchPalsExtension" folder in "PatchPalsExtension" target */,
+			);
+			path = PatchPalsExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,6 +80,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		47C31F262F73474800FDFFDD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				47C31F2C2F73474800FDFFDD /* Messages.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -33,6 +95,9 @@
 			isa = PBXGroup;
 			children = (
 				47834B672F5E1ED500AB72C3 /* PatchPals */,
+				47834B732F5E1ED500AB72C3 /* Shared */,
+				47C31F2D2F73474800FDFFDD /* PatchPalsExtension */,
+				47C31F2A2F73474800FDFFDD /* Frameworks */,
 				47834B662F5E1ED500AB72C3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +106,17 @@
 			isa = PBXGroup;
 			children = (
 				47834B652F5E1ED500AB72C3 /* PatchPals.app */,
+				47C31F292F73474800FDFFDD /* PatchPalsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		47C31F2A2F73474800FDFFDD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				47C31F2B2F73474800FDFFDD /* Messages.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,13 +129,16 @@
 				47834B612F5E1ED500AB72C3 /* Sources */,
 				47834B622F5E1ED500AB72C3 /* Frameworks */,
 				47834B632F5E1ED500AB72C3 /* Resources */,
+				47C31F392F73474A00FDFFDD /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				47C31F372F73474A00FDFFDD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				47834B672F5E1ED500AB72C3 /* PatchPals */,
+				47834B732F5E1ED500AB72C3 /* Shared */,
 			);
 			name = PatchPals;
 			packageProductDependencies = (
@@ -69,6 +146,29 @@
 			productName = PatchPals;
 			productReference = 47834B652F5E1ED500AB72C3 /* PatchPals.app */;
 			productType = "com.apple.product-type.application";
+		};
+		47C31F282F73474800FDFFDD /* PatchPalsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 47C31F3D2F73474A00FDFFDD /* Build configuration list for PBXNativeTarget "PatchPalsExtension" */;
+			buildPhases = (
+				47C31F252F73474800FDFFDD /* Sources */,
+				47C31F262F73474800FDFFDD /* Frameworks */,
+				47C31F272F73474800FDFFDD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				47834B732F5E1ED500AB72C3 /* Shared */,
+				47C31F2D2F73474800FDFFDD /* PatchPalsExtension */,
+			);
+			name = PatchPalsExtension;
+			packageProductDependencies = (
+			);
+			productName = PatchPalsExtension;
+			productReference = 47C31F292F73474800FDFFDD /* PatchPalsExtension.appex */;
+			productType = "com.apple.product-type.app-extension.messages";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +181,9 @@
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					47834B642F5E1ED500AB72C3 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					47C31F282F73474800FDFFDD = {
 						CreatedOnToolsVersion = 26.3;
 					};
 				};
@@ -100,12 +203,20 @@
 			projectRoot = "";
 			targets = (
 				47834B642F5E1ED500AB72C3 /* PatchPals */,
+				47C31F282F73474800FDFFDD /* PatchPalsExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		47834B632F5E1ED500AB72C3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		47C31F272F73474800FDFFDD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +233,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		47C31F252F73474800FDFFDD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		47C31F372F73474A00FDFFDD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 47C31F282F73474800FDFFDD /* PatchPalsExtension */;
+			targetProxy = 47C31F362F73474A00FDFFDD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		47834B6E2F5E1ED500AB72C3 /* Debug */ = {
@@ -251,6 +377,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = PatchPals/PatchPals.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = A28VB54MHZ;
@@ -283,6 +410,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = PatchPals/PatchPals.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = A28VB54MHZ;
@@ -310,6 +438,66 @@
 			};
 			name = Release;
 		};
+		47C31F3A2F73474A00FDFFDD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "iMessage App Icon";
+				CODE_SIGN_ENTITLEMENTS = PatchPalsExtension/PatchPalsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A28VB54MHZ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PatchPalsExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PatchPalsExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = mlsv.PatchPals.PatchPalsExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		47C31F3B2F73474A00FDFFDD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "iMessage App Icon";
+				CODE_SIGN_ENTITLEMENTS = PatchPalsExtension/PatchPalsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A28VB54MHZ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PatchPalsExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PatchPalsExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = mlsv.PatchPals.PatchPalsExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -327,6 +515,15 @@
 			buildConfigurations = (
 				47834B712F5E1ED500AB72C3 /* Debug */,
 				47834B722F5E1ED500AB72C3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		47C31F3D2F73474A00FDFFDD /* Build configuration list for PBXNativeTarget "PatchPalsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				47C31F3A2F73474A00FDFFDD /* Debug */,
+				47C31F3B2F73474A00FDFFDD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

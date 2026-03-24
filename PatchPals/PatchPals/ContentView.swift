@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 // MARK: - Root
 
 struct ContentView: View {
-    @State private var loggedInUserID: String?
+    @State private var loggedInUserID: String? = SessionStore.loggedInUserID
     @State private var packs: [Pack] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -30,6 +30,7 @@ struct ContentView: View {
                 )
             } else {
                 LoginView(onLoggedIn: { userID in
+                    SessionStore.loggedInUserID = userID
                     loggedInUserID = userID
                 })
             }
@@ -42,6 +43,7 @@ struct ContentView: View {
     }
 
     private func signOut() {
+        SessionStore.loggedInUserID = nil
         loggedInUserID = nil
         packs = []
         errorMessage = nil
@@ -70,7 +72,7 @@ private struct LoginView: View {
     @State private var tab: LoginTab = .signIn
 
     // Sign in
-    @State private var userID = "4146544a-0464-42bd-b14e-6185b1e75f9a"
+    @State private var userID = SessionStore.loggedInUserID ?? "4146544a-0464-42bd-b14e-6185b1e75f9a"
     @State private var signInError: String?
 
     // Create account
@@ -232,6 +234,7 @@ private struct LoginView: View {
         Task {
             do {
                 let user = try await APIClient.shared.createUser(email: trimmedEmail, password: password)
+                SessionStore.loggedInUserID = user.id
                 onLoggedIn(user.id)
             } catch {
                 createError = error.localizedDescription
