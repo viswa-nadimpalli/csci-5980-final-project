@@ -803,25 +803,24 @@ private struct StickerThumbnailView: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            AsyncImage(url: sticker.downloadURL.flatMap(URL.init(string:))) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
+            CachedStickerImage(
+                url: sticker.downloadURL.flatMap(URL.init(string:)),
+                cacheKey: sticker.s3Key,
+                contentMode: ContentMode.fill,
+                placeholder: {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color(.secondarySystemBackground))
+                        .overlay { ProgressView() }
+                },
+                failure: {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color(.secondarySystemBackground))
                         .overlay {
                             Image(systemName: "exclamationmark.triangle")
                                 .foregroundStyle(.secondary)
                         }
-                default:
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(.secondarySystemBackground))
-                        .overlay { ProgressView() }
                 }
-            }
+            )
             .frame(width: 100, height: 100)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 

@@ -74,7 +74,7 @@ struct MessagesStickerBrowserView: View {
                         PackChipView(
                             pack: pack,
                             isSelected: viewModel.selectedPackID == pack.id,
-                            previewURL: viewModel.previewURL(for: pack.id)
+                            previewSticker: viewModel.previewSticker(for: pack.id)
                         )
                     }
                     .buttonStyle(.plain)
@@ -218,9 +218,8 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
         stickerMap[packID] ?? []
     }
 
-    func previewURL(for packID: String) -> URL? {
-        guard let firstURL = stickers(for: packID).first?.downloadURL else { return nil }
-        return URL(string: firstURL)
+    func previewSticker(for packID: String) -> Sticker? {
+        stickers(for: packID).first
     }
 
     private func prefetchPackPreviews(userID: String) async {
@@ -252,7 +251,7 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
 private struct PackChipView: View {
     let pack: Pack
     let isSelected: Bool
-    let previewURL: URL?
+    let previewSticker: Sticker?
 
     var body: some View {
         VStack(spacing: 8) {
@@ -264,14 +263,20 @@ private struct PackChipView: View {
                             .stroke(isSelected ? Color.accentColor : Color.black.opacity(0.06), lineWidth: isSelected ? 2 : 1)
                     )
 
-                if let previewURL {
-                    AsyncImage(url: previewURL) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        ProgressView()
-                    }
+                if let previewSticker {
+                    CachedStickerImage(
+                        url: previewSticker.downloadURL.flatMap(URL.init(string:)),
+                        cacheKey: "pack-preview-\(previewSticker.s3Key)",
+                        contentMode: .fill,
+                        placeholder: {
+                            ProgressView()
+                        },
+                        failure: {
+                            Text(String(pack.name.prefix(1)).uppercased())
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundStyle(.secondary)
+                        }
+                    )
                 } else {
                     Text(String(pack.name.prefix(1)).uppercased())
                         .font(.system(size: 24, weight: .bold))
@@ -298,21 +303,20 @@ private struct StickerTileView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemGroupedBackground))
 
-            if let rawURL = sticker.downloadURL, let url = URL(string: rawURL) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFit()
-                        .padding(8)
-                } placeholder: {
+            CachedStickerImage(
+                url: sticker.downloadURL.flatMap(URL.init(string:)),
+                cacheKey: sticker.s3Key,
+                contentMode: .fit,
+                placeholder: {
                     ProgressView()
+                },
+                failure: {
+                    Image(systemName: "photo")
+                        .font(.system(size: 26))
+                        .foregroundStyle(.secondary)
                 }
-            } else {
-                Image(systemName: "photo")
-                    .font(.system(size: 26))
-                    .foregroundStyle(.secondary)
-            }
+            )
+            .padding(8)
         }
         .aspectRatio(1, contentMode: .fit)
         .overlay(

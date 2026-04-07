@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		47C31F2C2F73474800FDFFDD /* Messages.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 47C31F2B2F73474800FDFFDD /* Messages.framework */; };
 		47C31F382F73474A00FDFFDD /* PatchPalsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 47C31F292F73474800FDFFDD /* PatchPalsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		9A4C110A2F90000100ABCDEF /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 9A4C11082F90000100ABCDEF /* Kingfisher */; };
+		9A4C110B2F90000100ABCDEF /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 9A4C11092F90000100ABCDEF /* Kingfisher */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -77,6 +79,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9A4C110A2F90000100ABCDEF /* Kingfisher in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,6 +88,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				47C31F2C2F73474800FDFFDD /* Messages.framework in Frameworks */,
+				9A4C110B2F90000100ABCDEF /* Kingfisher in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -142,6 +146,7 @@
 			);
 			name = PatchPals;
 			packageProductDependencies = (
+				9A4C11082F90000100ABCDEF /* Kingfisher */,
 			);
 			productName = PatchPals;
 			productReference = 47834B652F5E1ED500AB72C3 /* PatchPals.app */;
@@ -165,6 +170,7 @@
 			);
 			name = PatchPalsExtension;
 			packageProductDependencies = (
+				9A4C11092F90000100ABCDEF /* Kingfisher */,
 			);
 			productName = PatchPalsExtension;
 			productReference = 47C31F292F73474800FDFFDD /* PatchPalsExtension.appex */;
@@ -197,6 +203,9 @@
 			);
 			mainGroup = 47834B5C2F5E1ED500AB72C3;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				9A4C11072F90000100ABCDEF /* XCRemoteSwiftPackageReference "Kingfisher" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 47834B662F5E1ED500AB72C3 /* Products */;
 			projectDirPath = "";
@@ -249,6 +258,17 @@
 			targetProxy = 47C31F362F73474A00FDFFDD /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		9A4C11072F90000100ABCDEF /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCBuildConfiguration section */
 		47834B6E2F5E1ED500AB72C3 /* Debug */ = {
@@ -499,6 +519,19 @@
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9A4C11082F90000100ABCDEF /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9A4C11072F90000100ABCDEF /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
+		9A4C11092F90000100ABCDEF /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9A4C11072F90000100ABCDEF /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */
 		47834B602F5E1ED500AB72C3 /* Build configuration list for PBXProject "PatchPals" */ = {
