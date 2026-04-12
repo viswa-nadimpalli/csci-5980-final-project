@@ -11,4 +11,8 @@ class Settings(BaseSettings):
     S3_BUCKET: str
     PRESIGN_EXPIRES_SECONDS: int = 300
 
+    CLERK_JWKS_URL: str
+    CLERK_ISSUER: str
+    CLERK_AUTHORIZED_PARTY: str | None = None
+
 settings = Settings()
