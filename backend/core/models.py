@@ -11,6 +11,7 @@ class PackRole(str, enum.Enum):
     viewer = "viewer"
 
 class AuthProvider(str, enum.Enum):
+    clerk = "clerk"
     apple = "apple"
     google = "google"
 
@@ -71,10 +72,11 @@ class UserIdentities(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     provider = Column(Enum(AuthProvider), nullable=False)
-    provider_sub = Column(String, nullable=False)
+    provider_user_id = Column(String, nullable=False) # Clerk user id
+    provider_email = Column(String, nullable=True) 
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
-    __table_args__ = (UniqueConstraint("provider", "provider_sub", name="uq_identity_provider_sub"),)
+    __table_args__ = (UniqueConstraint("provider", "provider_user_id", name="uq_identity_provider_user_id"),)
 
     user = relationship("User", back_populates="identities")
