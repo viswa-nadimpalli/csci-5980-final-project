@@ -19,6 +19,7 @@ struct Pack: Identifiable, Codable {
     var name: String
     var description: String?
     let ownerId: String
+    let stickersVersion: Int?
     var stickers: [Sticker]?
 
     enum CodingKeys: String, CodingKey {
@@ -26,6 +27,7 @@ struct Pack: Identifiable, Codable {
         case name
         case description
         case ownerId = "owner_id"
+        case stickersVersion = "stickers_version"
         case stickers
     }
 }
@@ -35,7 +37,7 @@ struct Sticker: Identifiable, Codable {
     let packId: String
     let uploadedBy: String
     let s3Key: String
-    let downloadURL: String?
+    var downloadURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id

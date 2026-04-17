@@ -39,6 +39,7 @@ class PackOut(BaseModel):
     name: str
     description: str | None = None
     owner_id: UUID
+    stickers_version: int
 
     class Config:
         from_attributes = True

@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from sqlalchemy import inspect, text
 
 from api.routes.health import router as health_router
 from api.routes.packs import router as packs_router
@@ -10,8 +11,22 @@ import core.models
 
 app = FastAPI(title="Sticker")
 
+
+def ensure_schema() -> None:
+    inspector = inspect(engine)
+    if "sticker_packs" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("sticker_packs")}
+    if "stickers_version" not in columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE sticker_packs ADD COLUMN stickers_version INTEGER NOT NULL DEFAULT 0")
+            )
+
 @app.on_event("startup")
 def startup():
+    ensure_schema()
     Base.metadata.create_all(bind=engine)
 
 app.include_router(health_router)

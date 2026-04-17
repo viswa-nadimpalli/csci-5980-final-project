@@ -29,10 +29,10 @@ struct CachedStickerImage: View {
         if didFail || url == nil {
             failure()
         } else if let url {
-            KFImage(source: .network(ImageResource(downloadURL: url, cacheKey: cacheKey)))
+            stickerImageSource(for: url)
                 .placeholder { placeholder() }
                 .onSuccess { result in
-                    let status = cacheLabel(for: result.cacheType)
+                    let status = cacheLabel(for: result.cacheType, url: url)
                     cacheStatusLabel = status
                     #if DEBUG
                     print("[StickerCache] key=\(cacheKey) status=\(status)")
@@ -64,7 +64,19 @@ struct CachedStickerImage: View {
         }
     }
 
-    private func cacheLabel(for cacheType: CacheType) -> String {
+    private func stickerImageSource(for url: URL) -> KFImage {
+        if url.isFileURL {
+            return KFImage(source: .provider(LocalFileImageDataProvider(fileURL: url, cacheKey: cacheKey)))
+        }
+
+        return KFImage(source: .network(ImageResource(downloadURL: url, cacheKey: cacheKey)))
+    }
+
+    private func cacheLabel(for cacheType: CacheType, url: URL) -> String {
+        if url.isFileURL {
+            return "local"
+        }
+
         switch cacheType {
         case .none:
             return "network"
