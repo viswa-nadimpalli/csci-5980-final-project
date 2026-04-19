@@ -154,6 +154,9 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var needsSignIn = false
 
+    private let cache = PackCacheService.shared
+    private let wsClient = PackWebSocketClient()
+
     var headerSubtitle: String {
         if let selectedPack {
             return selectedPack.name
@@ -166,8 +169,25 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
         return packs.first(where: { $0.id == selectedPackID })
     }
 
+    // MARK: - Startup
+
     func load() async {
         guard packs.isEmpty else { return }
+
+        // 1. Show cached data immediately so the UI isn't blank
+        let cached = cache.loadAll()
+        if !cached.isEmpty {
+            packs = cached.map {
+                Pack(id: $0.id, name: $0.name, description: $0.description,
+                     ownerId: $0.ownerId, packVersion: $0.packVersion)
+            }
+            for entry in cached {
+                stickerMap[entry.id] = entry.stickers
+            }
+            selectedPackID = packs.first?.id
+        }
+
+        // 2. Then refresh from server (version-aware)
         await refresh()
     }
 
@@ -186,19 +206,58 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
         needsSignIn = false
 
         do {
-            let loadedPacks = try await APIClient.shared.fetchPacks(requesterID: userID)
-            packs = loadedPacks
+            // Fetch all pack versions in one cheap call
+            let serverVersions = try await APIClient.shared.fetchPackVersions(userID: userID)
+            let serverVersionMap = Dictionary(uniqueKeysWithValues: serverVersions.map { ($0.packId, $0.packVersion) })
 
-            if let selectedPackID, loadedPacks.contains(where: { $0.id == selectedPackID }) {
-                await loadStickers(for: selectedPackID, userID: userID)
-            } else {
-                selectedPackID = loadedPacks.first?.id
-                if let firstPackID = loadedPacks.first?.id {
-                    await loadStickers(for: firstPackID, userID: userID)
+            // Fetch full data only for stale or missing packs
+            try await withThrowingTaskGroup(of: PackFull?.self) { group in
+                for entry in serverVersions {
+                    let cachedVersion = cache.cachedVersion(for: entry.packId)
+                    if cachedVersion == nil || cachedVersion! < entry.packVersion {
+                        group.addTask {
+                            try await APIClient.shared.fetchPackFull(packID: entry.packId, requesterID: userID)
+                        }
+                    }
+                }
+
+                for try await full in group {
+                    if let full {
+                        cache.upsertFromFull(full)
+                        stickerMap[full.id] = full.stickers
+                    }
                 }
             }
 
-            await prefetchPackPreviews(userID: userID)
+            // Remove packs the user no longer belongs to
+            let serverPackIDs = Set(serverVersions.map { $0.packId })
+            for cached in cache.loadAll() where !serverPackIDs.contains(cached.id) {
+                cache.remove(packID: cached.id)
+                stickerMap.removeValue(forKey: cached.id)
+            }
+
+            // Rebuild packs list from fresh cache
+            let allCached = cache.loadAll()
+            packs = allCached
+                .sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+                .map {
+                    Pack(id: $0.id, name: $0.name, description: $0.description,
+                         ownerId: $0.ownerId, packVersion: $0.packVersion)
+                }
+
+            // Apply any server-version overrides to pack list
+            packs = packs.map { pack in
+                var p = pack
+                if let v = serverVersionMap[pack.id] { p.packVersion = v }
+                return p
+            }
+
+            if let selectedPackID, !packs.contains(where: { $0.id == selectedPackID }) {
+                self.selectedPackID = packs.first?.id
+            } else if selectedPackID == nil {
+                selectedPackID = packs.first?.id
+            }
+
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -206,11 +265,28 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
         isLoading = false
     }
 
+    // MARK: - Pack selection + WebSocket
+
     func selectPack(_ packID: String) async {
         selectedPackID = packID
         guard let userID = SessionStore.loggedInUserID else { return }
+
+        // Load stickers from cache first if we have them
+        if stickerMap[packID] == nil,
+           let cached = cache.loadAll().first(where: { $0.id == packID }) {
+            stickerMap[packID] = cached.stickers
+        }
+
+        // Connect WebSocket for real-time updates on this pack
+        wsClient.onEvent = { [weak self] event in
+            guard let self else { return }
+            Task { await self.handleWebSocketEvent(event, userID: userID) }
+        }
+        wsClient.connect(packID: packID)
+
+        // Fetch fresh stickers if not already loaded
         if stickerMap[packID] == nil {
-            await loadStickers(for: packID, userID: userID)
+            await refreshPackFull(packID: packID, userID: userID)
         }
     }
 
@@ -222,29 +298,29 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
         stickers(for: packID).first
     }
 
-    private func prefetchPackPreviews(userID: String) async {
-        await withTaskGroup(of: Void.self) { group in
-            for pack in packs where stickerMap[pack.id] == nil {
-                group.addTask {
-                    let stickers = (try? await APIClient.shared.fetchStickers(packID: pack.id, userID: userID)) ?? []
-                    await MainActor.run {
-                        if self.stickerMap[pack.id] == nil {
-                            self.stickerMap[pack.id] = stickers
-                        }
-                    }
-                }
-            }
-        }
+    // MARK: - WebSocket event handling
+
+    private func handleWebSocketEvent(_ event: PackWebSocketEvent, userID: String) async {
+        guard event.eventType == "pack_updated" else { return }
+        let cachedVersion = cache.cachedVersion(for: event.packId) ?? -1
+        guard event.packVersion > cachedVersion else { return }
+        await refreshPackFull(packID: event.packId, userID: userID)
     }
 
-    private func loadStickers(for packID: String, userID: String) async {
-        isLoadingPack = true
+    private func refreshPackFull(packID: String, userID: String) async {
+        if packID == selectedPackID { isLoadingPack = true }
         do {
-            stickerMap[packID] = try await APIClient.shared.fetchStickers(packID: packID, userID: userID)
+            let full = try await APIClient.shared.fetchPackFull(packID: packID, requesterID: userID)
+            cache.upsertFromFull(full)
+            stickerMap[full.id] = full.stickers
+            // Update pack version in the list
+            if let idx = packs.firstIndex(where: { $0.id == full.id }) {
+                packs[idx].packVersion = full.packVersion
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            // Silently ignore — stale data is still usable
         }
-        isLoadingPack = false
+        if packID == selectedPackID { isLoadingPack = false }
     }
 }
 

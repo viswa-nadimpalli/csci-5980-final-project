@@ -111,6 +111,30 @@ final class APIClient {
         try validate(response: response, data: data)
     }
 
+    func fetchPackVersions(userID: String) async throws -> [PackVersionEntry] {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("users/\(userID)/pack-versions"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = []
+
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([PackVersionEntry].self, from: data)
+    }
+
+    func fetchPackFull(packID: String, requesterID: String) async throws -> PackFull {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("packs/\(packID)/full"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "requester_id", value: requesterID)]
+
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(PackFull.self, from: data)
+    }
+
     func fetchStickers(packID: String, userID: String) async throws -> [Sticker] {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("packs/\(packID)/stickers"),
