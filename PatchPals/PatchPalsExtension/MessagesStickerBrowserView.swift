@@ -1,8 +1,6 @@
 import SwiftUI
 import Messages
 import Combine
-import ImageIO
-import UniformTypeIdentifiers
 import UIKit
 
 struct MessagesStickerBrowserView: View {
@@ -343,7 +341,7 @@ private struct PackChipView: View {
                     CachedStickerImage(
                         url: previewSticker.downloadURL.flatMap(URL.init(string:)),
                         cacheKey: "pack-preview-\(previewSticker.s3Key)",
-                        contentMode: .fill,
+                        contentMode: SwiftUI.ContentMode.fill,
                         placeholder: {
                             ProgressView()
                         },
@@ -382,7 +380,7 @@ private struct StickerTileView: View {
             CachedStickerImage(
                 url: sticker.downloadURL.flatMap(URL.init(string:)),
                 cacheKey: sticker.s3Key,
-                contentMode: .fit,
+                contentMode: SwiftUI.ContentMode.fit,
                 placeholder: {
                     ProgressView()
                 },
@@ -403,139 +401,8 @@ private struct StickerTileView: View {
 }
 
 actor MessageStickerSender {
-    private let fileManager = FileManager.default
-    private let supportedStickerTypes: Set<UTType> = [.png, .jpeg, .gif]
-    private let maxStickerFileSize = 500 * 1024
-    private let maxStickerDimension: CGFloat = 618
-    private let minStickerDimension: CGFloat = 120
-
     func makeMSSticker(from sticker: Sticker) async throws -> MSSticker {
-        let fileURL = try await localFileURL(for: sticker)
+        let fileURL = try await StickerPackCache.shared.preparedFileURL(for: sticker)
         return try MSSticker(contentsOfFileURL: fileURL, localizedDescription: "PatchPals sticker")
-    }
-
-    private func localFileURL(for sticker: Sticker) async throws -> URL {
-        guard let remoteURLString = sticker.downloadURL, let remoteURL = URL(string: remoteURLString) else {
-            throw APIError(detail: "This sticker is missing a download URL.")
-        }
-
-        let cacheDirectory = try cacheDirectoryURL()
-        let (data, _) = try await URLSession.shared.data(from: remoteURL)
-        let preparedFile = try preparedStickerFile(for: sticker.id, data: data, cacheDirectory: cacheDirectory)
-
-        if let existingFiles = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) {
-            for fileURL in existingFiles where fileURL.deletingPathExtension().lastPathComponent == sticker.id && fileURL != preparedFile {
-                try? fileManager.removeItem(at: fileURL)
-            }
-        }
-
-        if fileManager.fileExists(atPath: preparedFile.path) {
-            try? fileManager.removeItem(at: preparedFile)
-        }
-
-        try dataForStickerFile(from: data, destinationType: destinationType(for: data)).write(to: preparedFile, options: .atomic)
-        return preparedFile
-    }
-
-    private func preparedStickerFile(for stickerID: String, data: Data, cacheDirectory: URL) throws -> URL {
-        let type = destinationType(for: data)
-        return cacheDirectory.appendingPathComponent("\(stickerID).\(type.preferredFilenameExtension ?? "png")")
-    }
-
-    private func destinationType(for data: Data) -> UTType {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let identifier = CGImageSourceGetType(source) as String?,
-              let detectedType = UTType(identifier)
-        else {
-            return .png
-        }
-
-        if supportedStickerTypes.contains(detectedType) {
-            return detectedType
-        }
-
-        return .png
-    }
-
-    private func dataForStickerFile(from data: Data, destinationType: UTType) throws -> Data {
-        if destinationType != .png, data.count <= maxStickerFileSize, imageFitsStickerBounds(data: data) {
-            return data
-        }
-
-        if let source = CGImageSourceCreateWithData(data as CFData, nil),
-           let identifier = CGImageSourceGetType(source) as String?,
-           let detectedType = UTType(identifier),
-           detectedType == .png,
-           data.count <= maxStickerFileSize,
-           imageFitsStickerBounds(data: data) {
-            return data
-        }
-
-        guard let image = UIImage(data: data) else {
-            throw APIError(detail: "This sticker format can't be converted for Messages.")
-        }
-
-        return try sanitizedStickerData(from: image)
-    }
-
-    private func cacheDirectoryURL() throws -> URL {
-        let cachesDirectory = try fileManager.url(
-            for: .cachesDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let directory = cachesDirectory.appendingPathComponent("MessagesStickerCache", isDirectory: true)
-        if !fileManager.fileExists(atPath: directory.path) {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-        return directory
-    }
-
-    private func imageFitsStickerBounds(data: Data) -> Bool {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
-              let height = properties[kCGImagePropertyPixelHeight] as? CGFloat
-        else {
-            return false
-        }
-
-        return width <= maxStickerDimension && height <= maxStickerDimension
-    }
-
-    private func sanitizedStickerData(from image: UIImage) throws -> Data {
-        var targetDimension = min(max(image.size.width, image.size.height), maxStickerDimension)
-
-        while targetDimension >= minStickerDimension {
-            let renderedImage = resizedImage(from: image, maxDimension: targetDimension)
-
-            if let pngData = renderedImage.pngData(), pngData.count <= maxStickerFileSize {
-                return pngData
-            }
-
-            targetDimension *= 0.82
-        }
-
-        throw APIError(detail: "This sticker is too large for Messages. Try a smaller image.")
-    }
-
-    private func resizedImage(from image: UIImage, maxDimension: CGFloat) -> UIImage {
-        let longestSide = max(image.size.width, image.size.height)
-        guard longestSide > 0 else { return image }
-
-        let scale = min(1, maxDimension / longestSide)
-        let targetSize = CGSize(
-            width: max(1, floor(image.size.width * scale)),
-            height: max(1, floor(image.size.height * scale))
-        )
-
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        format.opaque = false
-
-        return UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: targetSize))
-        }
     }
 }

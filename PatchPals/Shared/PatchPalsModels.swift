@@ -77,7 +77,7 @@ struct Sticker: Identifiable, Codable {
     let packId: String
     let uploadedBy: String
     let s3Key: String
-    let downloadURL: String?
+    var downloadURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id

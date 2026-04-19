@@ -135,4 +135,3 @@ async def delete_sticker(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
-

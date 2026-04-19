@@ -36,7 +36,6 @@ class StickerPack(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-
     pack_version = Column(Integer, nullable=False, default=0, server_default="0")
 
     owner = relationship("User", back_populates="owned_packs", foreign_keys=[owner_id])
