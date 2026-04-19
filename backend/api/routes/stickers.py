@@ -1,7 +1,8 @@
 import uuid
 from uuid import UUID
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,7 @@ from core.db import get_db
 from core.models import Image, PackMembership, StickerPack
 from core.s3 import presigned_download_url, presigned_upload_url
 from core.config import settings
+from api.routes.websocket import manager as ws_manager
 
 router = APIRouter(tags=["stickers"])
 
@@ -73,13 +75,30 @@ def get_upload_url(
 
 
 @router.post("/packs/{pack_id}/stickers", response_model=StickerOut, status_code=status.HTTP_201_CREATED)
-def add_sticker(pack_id: UUID, payload: StickerCreate, db: Session = Depends(get_db)):
+async def add_sticker(
+    pack_id: UUID,
+    payload: StickerCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """Register a sticker in the DB after the file has been uploaded to S3."""
     _require_role(db, payload.user_id, pack_id, "owner", "contributor")
+    pack = db.get(StickerPack, pack_id)
+    pack.pack_version += 1
     sticker = Image(pack_id=pack_id, uploaded_by=payload.user_id, s3_key=payload.s3_key)
     db.add(sticker)
     db.commit()
     db.refresh(sticker)
+    background_tasks.add_task(
+        ws_manager.broadcast_to_pack,
+        str(pack_id),
+        {
+            "event_type": "pack_updated",
+            "pack_id": str(pack_id),
+            "pack_version": pack.pack_version,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
     return _sticker_out(sticker)
 
 
@@ -91,11 +110,29 @@ def list_stickers(pack_id: UUID, user_id: UUID = Query(...), db: Session = Depen
 
 
 @router.delete("/stickers/{sticker_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_sticker(sticker_id: UUID, user_id: UUID = Query(...), db: Session = Depends(get_db)):
+async def delete_sticker(
+    sticker_id: UUID,
+    background_tasks: BackgroundTasks,
+    user_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+):
     sticker = db.get(Image, sticker_id)
     if not sticker:
         raise HTTPException(status_code=404, detail="Sticker not found")
-    _require_role(db, user_id, sticker.pack_id, "owner", "contributor")
+    pack_id = sticker.pack_id
+    _require_role(db, user_id, pack_id, "owner", "contributor")
+    pack = db.get(StickerPack, pack_id)
+    pack.pack_version += 1
     db.delete(sticker)
     db.commit()
+    background_tasks.add_task(
+        ws_manager.broadcast_to_pack,
+        str(pack_id),
+        {
+            "event_type": "pack_updated",
+            "pack_id": str(pack_id),
+            "pack_version": pack.pack_version,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 

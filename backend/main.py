@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from api.routes.health import router as health_router
 from api.routes.packs import router as packs_router
 from api.routes.users import router as users_router
 from api.routes.stickers import router as stickers_router
+from api.routes.websocket import router as websocket_router
 
 from core.db import engine, Base
 import core.models
@@ -22,8 +24,16 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
+    # Add pack_version to existing tables that predate this column
+    with engine.connect() as conn:
+        conn.execute(text(
+            "ALTER TABLE sticker_packs "
+            "ADD COLUMN IF NOT EXISTS pack_version INTEGER NOT NULL DEFAULT 0"
+        ))
+        conn.commit()
 
 app.include_router(health_router)
 app.include_router(packs_router)
 app.include_router(users_router)
 app.include_router(stickers_router)
+app.include_router(websocket_router)

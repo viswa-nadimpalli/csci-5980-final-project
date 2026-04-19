@@ -1,13 +1,16 @@
 from uuid import UUID
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import String, cast, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from core.db import get_db
-from core.models import PackMembership, PackRole, StickerPack, User
+from core.models import Image, PackMembership, PackRole, StickerPack, User
+from core.s3 import presigned_download_url
+from api.routes.websocket import manager as ws_manager
 
 router = APIRouter(prefix="/packs", tags=["packs"])
 
@@ -39,6 +42,32 @@ class PackOut(BaseModel):
     name: str
     description: str | None = None
     owner_id: UUID
+    pack_version: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class PackVersionOut(BaseModel):
+    pack_id: UUID
+    pack_version: int
+
+
+class StickerOut(BaseModel):
+    id: UUID
+    pack_id: UUID
+    uploaded_by: UUID
+    s3_key: str
+    download_url: str
+
+
+class PackFullOut(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    owner_id: UUID
+    pack_version: int
+    stickers: list[StickerOut]
 
     class Config:
         from_attributes = True
@@ -119,6 +148,35 @@ def list_packs(
 
     return packs
 
+@router.get("/{pack_id}/full", response_model=PackFullOut)
+def get_pack_full(
+    pack_id: UUID,
+    requester_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+):
+    pack = _get_pack_or_404(pack_id, db)
+    _require_role(requester_id, pack, db, "owner", "contributor", "viewer")
+    images = db.query(Image).filter_by(pack_id=pack_id).order_by(Image.created_at.desc()).all()
+    stickers = [
+        StickerOut(
+            id=img.id,
+            pack_id=img.pack_id,
+            uploaded_by=img.uploaded_by,
+            s3_key=img.s3_key,
+            download_url=presigned_download_url(img.s3_key),
+        )
+        for img in images
+    ]
+    return PackFullOut(
+        id=pack.id,
+        name=pack.name,
+        description=pack.description,
+        owner_id=pack.owner_id,
+        pack_version=pack.pack_version,
+        stickers=stickers,
+    )
+
+
 @router.delete("/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_pack(
     pack_id: UUID,
@@ -131,9 +189,10 @@ def delete_pack(
     db.commit()
 
 @router.post("/{pack_id}/members", response_model=MemberOut, status_code=status.HTTP_201_CREATED)
-def add_member(
+async def add_member(
     pack_id: UUID,
     payload: MemberAdd,
+    background_tasks: BackgroundTasks,
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
 ):
@@ -153,14 +212,26 @@ def add_member(
 
     membership = PackMembership(user_id=payload.user_id, pack_id=pack_id, role=payload.role)
     db.add(membership)
+    pack.pack_version += 1
     db.commit()
     db.refresh(membership)
+    background_tasks.add_task(
+        ws_manager.broadcast_to_pack,
+        str(pack_id),
+        {
+            "event_type": "pack_updated",
+            "pack_id": str(pack_id),
+            "pack_version": pack.pack_version,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
     return membership
 
 @router.delete("/{pack_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_member(
+async def remove_member(
     pack_id: UUID,
     user_id: UUID,
+    background_tasks: BackgroundTasks,
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
 ):
@@ -172,7 +243,18 @@ def remove_member(
     if not membership:
         raise HTTPException(status_code=404, detail="Membership not found")
     db.delete(membership)
+    pack.pack_version += 1
     db.commit()
+    background_tasks.add_task(
+        ws_manager.broadcast_to_pack,
+        str(pack_id),
+        {
+            "event_type": "pack_updated",
+            "pack_id": str(pack_id),
+            "pack_version": pack.pack_version,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
 @router.post("/{pack_id}/transfer-ownership", response_model=PackOut)
 def transfer_ownership(
