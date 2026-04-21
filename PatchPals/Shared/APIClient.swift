@@ -1,8 +1,6 @@
 import Foundation
 import UniformTypeIdentifiers
 
-// MARK: - API Error
-
 struct APIError: LocalizedError {
     let detail: String
 
@@ -20,17 +18,12 @@ struct APIError: LocalizedError {
     }
 }
 
-// MARK: - APIClient
-
 final class APIClient {
     static let shared = APIClient()
 
     private init() {}
 
-//    private let baseURL = URL(string: "http://127.0.0.1:3001")!
     private let baseURL = URL(string: "https://api.18-191-85-231.nip.io")!
-
-    // MARK: - Users
 
     func createUser(email: String, password: String) async throws -> UserCreateResponse {
         let url = baseURL.appendingPathComponent("users")
@@ -43,8 +36,6 @@ final class APIClient {
         try validate(response: response, data: data)
         return try JSONDecoder().decode(UserCreateResponse.self, from: data)
     }
-
-    // MARK: - Packs
 
     func fetchPacks(requesterID: String) async throws -> [Pack] {
         var components = URLComponents(
@@ -65,7 +56,9 @@ final class APIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         var body: [String: String] = ["name": name, "owner_id": ownerID]
-        if let description, !description.isEmpty { body["description"] = description }
+        if let description, !description.isEmpty {
+            body["description"] = description
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -86,8 +79,6 @@ final class APIClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data)
     }
-
-    // MARK: - Members
 
     func addMember(packID: String, requesterID: String, userID: String, role: PackRole) async throws -> Member {
         var components = URLComponents(
@@ -120,7 +111,29 @@ final class APIClient {
         try validate(response: response, data: data)
     }
 
-    // MARK: - Stickers
+    func fetchPackVersions(userID: String) async throws -> [PackVersionEntry] {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("users/\(userID)/pack-versions"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = []
+
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([PackVersionEntry].self, from: data)
+    }
+
+    func fetchPackFull(packID: String, requesterID: String) async throws -> PackFull {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("packs/\(packID)/full"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "requester_id", value: requesterID)]
+
+        let (data, response) = try await URLSession.shared.data(from: components.url!)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(PackFull.self, from: data)
+    }
 
     func fetchStickers(packID: String, userID: String) async throws -> [Sticker] {
         var components = URLComponents(
@@ -154,8 +167,6 @@ final class APIClient {
         return try await createSticker(packID: packID, userID: userID, s3Key: uploadInfo.s3Key)
     }
 
-    // MARK: - Private sticker helpers
-
     private func getUploadURL(packID: String, userID: String) async throws -> UploadURLResponse {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("packs/\(packID)/stickers/upload-url"),
@@ -169,7 +180,9 @@ final class APIClient {
     }
 
     private func uploadImageToS3(uploadURL: String, imageData: Data, contentType: String) async throws {
-        guard let url = URL(string: uploadURL) else { throw URLError(.badURL) }
+        guard let url = URL(string: uploadURL) else {
+            throw URLError(.badURL)
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
@@ -192,8 +205,6 @@ final class APIClient {
         try validate(response: response, data: data)
         return try JSONDecoder().decode(Sticker.self, from: data)
     }
-
-    // MARK: - Validation helper
 
     private func validate(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else {

@@ -6,8 +6,10 @@ enum PackRole: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .contributor: return "Contributor"
-        case .viewer: return "Viewer"
+        case .contributor:
+            return "Contributor"
+        case .viewer:
+            return "Viewer"
         }
     }
 }
@@ -17,6 +19,7 @@ struct Pack: Identifiable, Codable {
     var name: String
     var description: String?
     let ownerId: String
+    var packVersion: Int
     var stickers: [Sticker]?
 
     enum CodingKeys: String, CodingKey {
@@ -24,7 +27,48 @@ struct Pack: Identifiable, Codable {
         case name
         case description
         case ownerId = "owner_id"
+        case packVersion = "pack_version"
         case stickers
+    }
+}
+
+struct PackVersionEntry: Codable {
+    let packId: String
+    let packVersion: Int
+
+    enum CodingKeys: String, CodingKey {
+        case packId = "pack_id"
+        case packVersion = "pack_version"
+    }
+}
+
+struct PackFull: Codable {
+    let id: String
+    let name: String
+    let description: String?
+    let ownerId: String
+    let packVersion: Int
+    let stickers: [Sticker]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case ownerId = "owner_id"
+        case packVersion = "pack_version"
+        case stickers
+    }
+}
+
+struct PackWebSocketEvent: Decodable {
+    let eventType: String
+    let packId: String
+    let packVersion: Int
+
+    enum CodingKeys: String, CodingKey {
+        case eventType = "event_type"
+        case packId = "pack_id"
+        case packVersion = "pack_version"
     }
 }
 
@@ -33,7 +77,7 @@ struct Sticker: Identifiable, Codable {
     let packId: String
     let uploadedBy: String
     let s3Key: String
-    let downloadURL: String?
+    var downloadURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id
