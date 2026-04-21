@@ -48,11 +48,6 @@ class PackOut(BaseModel):
         from_attributes = True
 
 
-class PackVersionOut(BaseModel):
-    pack_id: UUID
-    pack_version: int
-
-
 class StickerOut(BaseModel):
     id: UUID
     pack_id: UUID
@@ -257,9 +252,10 @@ async def remove_member(
     )
 
 @router.post("/{pack_id}/transfer-ownership", response_model=PackOut)
-def transfer_ownership(
+async def transfer_ownership(
     pack_id: UUID,
     payload: TransferOwnership,
+    background_tasks: BackgroundTasks,
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
 ):
@@ -285,6 +281,17 @@ def transfer_ownership(
         db.add(PackMembership(user_id=pack.owner_id, pack_id=pack_id, role=PackRole.contributor))
 
     pack.owner_id = payload.new_owner_id
+    pack.pack_version += 1
     db.commit()
     db.refresh(pack)
+    background_tasks.add_task(
+        ws_manager.broadcast_to_pack,
+        str(pack_id),
+        {
+            "event_type": "pack_updated",
+            "pack_id": str(pack_id),
+            "pack_version": pack.pack_version,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
     return pack
