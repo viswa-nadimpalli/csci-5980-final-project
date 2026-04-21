@@ -30,6 +30,7 @@ load_data()
 
 
 class StickerAppUser(HttpUser):
+    host = "https://api.18-191-85-231.nip.io"
     wait_time = between(1, 3)
 
     def on_start(self):
