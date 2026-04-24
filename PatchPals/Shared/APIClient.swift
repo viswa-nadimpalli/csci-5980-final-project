@@ -1,5 +1,8 @@
 import Foundation
 import UniformTypeIdentifiers
+import OSLog
+
+private let signposter = OSSignposter(subsystem: "com.patchpals.cache", category: "StickerPackCache")
 
 struct APIError: LocalizedError {
     let detail: String
@@ -38,6 +41,9 @@ final class APIClient {
     }
 
     func fetchPacks(requesterID: String) async throws -> [Pack] {
+        let state = signposter.beginInterval("APIClient - network fetch sticker packs", id: .exclusive)
+        defer { signposter.endInterval("APIClient - network fetch sticker packs", state) }
+
         var components = URLComponents(
             url: baseURL.appendingPathComponent("packs"),
             resolvingAgainstBaseURL: false

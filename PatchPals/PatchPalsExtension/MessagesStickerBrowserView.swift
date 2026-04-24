@@ -2,6 +2,9 @@ import SwiftUI
 import Messages
 import Combine
 import UIKit
+import OSLog
+
+private let signposter = OSSignposter(subsystem: "com.patchpals.cache", category: "StickerPackCache")
 
 struct MessagesStickerBrowserView: View {
     @StateObject private var viewModel = MessagesStickerBrowserViewModel()
@@ -172,6 +175,8 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
     }
 
     func refresh() async {
+        let state = signposter.beginInterval("Sync refresh sticker packs", id: .exclusive)
+        defer { signposter.endInterval("Sync refresh sticker packs", state) }
         guard let userID = SessionStore.loggedInUserID else {
             needsSignIn = true
             packs = []
@@ -250,13 +255,17 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
     }
 
     private func loadStickers(for pack: Pack, userID: String) async {
+        let state = signposter.beginInterval("Load stickers for pack", id: .exclusive, "\(pack.id)")
         isLoadingPack = true
+        defer {
+            isLoadingPack = false
+            signposter.endInterval("Load stickers for pack", state)
+        }
         do {
             stickerMap[pack.id] = try await stickerCache.stickers(for: pack, userID: userID)
         } catch {
             errorMessage = error.localizedDescription
         }
-        isLoadingPack = false
     }
 }
 

@@ -2,6 +2,9 @@ import Foundation
 import ImageIO
 import UIKit
 import UniformTypeIdentifiers
+import OSLog
+
+private let signposter = OSSignposter(subsystem: "com.patchpals.cache", category: "StickerPackCache")
 
 struct CachedStickerRecord: Codable {
     var sticker: Sticker
@@ -30,6 +33,8 @@ actor StickerPackCache {
     }
 
     func cachedStickers(for pack: Pack) -> [Sticker]? {
+        let state = signposter.beginInterval("Check cache for pack", id: .exclusive, "\(pack.id)")
+        defer { signposter.endInterval("Check cache for pack", state) }
         guard let manifest = try? loadManifest(packID: pack.id),
               manifest.version == version(for: pack)
         else {
@@ -40,14 +45,21 @@ actor StickerPackCache {
     }
 
     func stickers(for pack: Pack, userID: String) async throws -> [Sticker] {
+        let state = signposter.beginInterval("Load stickers for pack", id: .exclusive, "\(pack.id)")
+        defer { signposter.endInterval("Load stickers for pack", state) }
+
         if var manifest = try? loadManifest(packID: pack.id),
            manifest.version == version(for: pack) {
+            let hitState = signposter.beginInterval("cache_hit", id: .exclusive, "\(pack.id)")
             manifest = try await ensurePreparedAssets(in: manifest)
             try saveManifest(manifest)
+            signposter.endInterval("cache_hit", hitState)
             return decoratedStickers(from: manifest)
         }
 
+        let missState = signposter.beginInterval("cache_miss", id: .exclusive, "\(pack.id)")
         let stickers = try await APIClient.shared.fetchStickers(packID: pack.id, userID: userID)
+        signposter.endInterval("cache_miss", missState)
         let existingManifest = try? loadManifest(packID: pack.id)
         let existingFilenames = Dictionary(
             uniqueKeysWithValues: (existingManifest?.stickers ?? []).map { ($0.sticker.id, $0.localFilename) }
@@ -116,6 +128,8 @@ actor StickerPackCache {
     }
 
     private func prepareStickerFile(for sticker: Sticker, existingFilename: String?) async throws -> String {
+        let state = signposter.beginInterval("Prepare sticker file", id: .exclusive, "\(sticker.id)")
+        defer { signposter.endInterval("Prepare sticker file", state) }
         if let existingFilename,
            let existingURL = try existingStickerFileURL(filename: existingFilename) {
             return existingURL.lastPathComponent
