@@ -4,6 +4,9 @@ import Combine
 import ImageIO
 import UniformTypeIdentifiers
 import UIKit
+import OSLog
+
+private let signposter = OSSignposter(subsystem: "com.patchpals.oldboy", category: "MessagesStickerBrowser")
 
 struct MessagesStickerBrowserView: View {
     @StateObject private var viewModel = MessagesStickerBrowserViewModel()
@@ -172,6 +175,9 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
     }
 
     func refresh() async {
+        let state = signposter.beginInterval("Refresh Sticker Packs", id: .exclusive)
+        defer { signposter.endInterval("Refresh Sticker Packs", state) }
+
         guard let userID = SessionStore.loggedInUserID else {
             needsSignIn = true
             packs = []
@@ -239,13 +245,19 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
     }
 
     private func loadStickers(for packID: String, userID: String) async {
+        let state = signposter.beginInterval("Load Stickers for Pack", id: .exclusive, "\(pack.id)")
         isLoadingPack = true
+
+        defer {
+            isLoadingPack = false
+            signposter.endInterval("Load Stickers for Pack", state)
+        }
+
         do {
             stickerMap[packID] = try await APIClient.shared.fetchStickers(packID: packID, userID: userID)
         } catch {
             errorMessage = error.localizedDescription
         }
-        isLoadingPack = false
     }
 }
 
