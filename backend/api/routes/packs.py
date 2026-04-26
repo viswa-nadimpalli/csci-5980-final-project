@@ -98,10 +98,12 @@ async def get_pack(
     cache_key = f"pack:{pack_id}"
     cached = await cache_get(cache_key)
     if cached is not None:
-        # Auth still requires a DB lookup; ownership is stored in the cached payload
-        # so we only hit the DB for membership check when the requester is not the owner.
+        # Fast path: owner check uses cached owner_id — no DB hit needed.
+        if str(requester_id) == cached["owner_id"]:
+            return cached
+        # Non-owner: verify membership in DB (cheaper than re-fetching the full pack).
         pack = _get_pack_or_404(pack_id, db)
-        _require_role(requester_id, pack, db, "owner", "contributor", "viewer")
+        _require_role(requester_id, pack, db, "contributor", "viewer")
         return cached
 
     pack = _get_pack_or_404(pack_id, db)
