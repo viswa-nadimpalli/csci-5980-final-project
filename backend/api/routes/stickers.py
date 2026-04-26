@@ -9,8 +9,13 @@ from core.db import get_db
 from core.models import Image, PackMembership, StickerPack
 from core.s3 import presigned_download_url, presigned_upload_url
 from core.config import settings
+from core.cache import cache_delete, cache_get, cache_set
 
 router = APIRouter(tags=["stickers"])
+
+# Sticker list cache TTL — kept below PRESIGN_EXPIRES_SECONDS so cached s3_keys
+# can always produce a fresh presigned URL on read.
+_STICKER_CACHE_TTL = 120
 
 
 class UploadUrlOut(BaseModel):
@@ -59,6 +64,17 @@ def _sticker_out(image: Image) -> StickerOut:
     )
 
 
+def _sticker_from_cached(entry: dict) -> StickerOut:
+    # Regenerate presigned URL from cached s3_key so it's always fresh.
+    return StickerOut(
+        id=entry["id"],
+        pack_id=entry["pack_id"],
+        uploaded_by=entry["uploaded_by"],
+        s3_key=entry["s3_key"],
+        download_url=presigned_download_url(entry["s3_key"]),
+    )
+
+
 @router.get("/packs/{pack_id}/stickers/upload-url", response_model=UploadUrlOut)
 def get_upload_url(
     pack_id: UUID,
@@ -73,29 +89,45 @@ def get_upload_url(
 
 
 @router.post("/packs/{pack_id}/stickers", response_model=StickerOut, status_code=status.HTTP_201_CREATED)
-def add_sticker(pack_id: UUID, payload: StickerCreate, db: Session = Depends(get_db)):
+async def add_sticker(pack_id: UUID, payload: StickerCreate, db: Session = Depends(get_db)):
     """Register a sticker in the DB after the file has been uploaded to S3."""
     _require_role(db, payload.user_id, pack_id, "owner", "contributor")
     sticker = Image(pack_id=pack_id, uploaded_by=payload.user_id, s3_key=payload.s3_key)
     db.add(sticker)
     db.commit()
     db.refresh(sticker)
+    await cache_delete(f"pack:{pack_id}:stickers")
     return _sticker_out(sticker)
 
 
 @router.get("/packs/{pack_id}/stickers", response_model=list[StickerOut])
-def list_stickers(pack_id: UUID, user_id: UUID = Query(...), db: Session = Depends(get_db)):
+async def list_stickers(pack_id: UUID, user_id: UUID = Query(...), db: Session = Depends(get_db)):
     _require_role(db, user_id, pack_id, "owner", "contributor", "viewer")
+
+    cache_key = f"pack:{pack_id}:stickers"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return [_sticker_from_cached(e) for e in cached]
+
     images = db.query(Image).filter_by(pack_id=pack_id).order_by(Image.created_at.desc()).all()
-    return [_sticker_out(img) for img in images]
+    out = [_sticker_out(img) for img in images]
+    # Store without download_url so cached entries aren't bound to a presign expiry window.
+    to_store = [
+        {"id": str(img.id), "pack_id": str(img.pack_id),
+         "uploaded_by": str(img.uploaded_by), "s3_key": img.s3_key}
+        for img in images
+    ]
+    await cache_set(cache_key, to_store, ttl=_STICKER_CACHE_TTL)
+    return out
 
 
 @router.delete("/stickers/{sticker_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_sticker(sticker_id: UUID, user_id: UUID = Query(...), db: Session = Depends(get_db)):
+async def delete_sticker(sticker_id: UUID, user_id: UUID = Query(...), db: Session = Depends(get_db)):
     sticker = db.get(Image, sticker_id)
     if not sticker:
         raise HTTPException(status_code=404, detail="Sticker not found")
     _require_role(db, user_id, sticker.pack_id, "owner", "contributor")
+    pack_id = sticker.pack_id
     db.delete(sticker)
     db.commit()
-
+    await cache_delete(f"pack:{pack_id}:stickers")

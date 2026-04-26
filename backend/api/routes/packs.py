@@ -8,14 +8,17 @@ from sqlalchemy.exc import IntegrityError
 
 from core.db import get_db
 from core.models import PackMembership, PackRole, StickerPack, User
+from core.cache import cache_delete, cache_get, cache_set
 
 router = APIRouter(prefix="/packs", tags=["packs"])
+
 
 def _get_pack_or_404(pack_id: UUID, db: Session) -> StickerPack:
     pack = db.get(StickerPack, pack_id)
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
     return pack
+
 
 def _effective_role(user_id: UUID, pack: StickerPack, db: Session) -> str | None:
     """Return 'owner', 'contributor', 'viewer', or None if the user has no access."""
@@ -24,15 +27,18 @@ def _effective_role(user_id: UUID, pack: StickerPack, db: Session) -> str | None
     membership = db.get(PackMembership, (user_id, pack.id))
     return membership.role.value if membership else None
 
+
 def _require_role(user_id: UUID, pack: StickerPack, db: Session, *allowed: str) -> None:
     role = _effective_role(user_id, pack, db)
     if role not in allowed:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
+
 class PackCreate(BaseModel):
     name: str
     description: str | None = None
     owner_id: UUID
+
 
 class PackOut(BaseModel):
     id: UUID
@@ -43,9 +49,11 @@ class PackOut(BaseModel):
     class Config:
         from_attributes = True
 
+
 class MemberAdd(BaseModel):
     user_id: UUID
     role: PackRole  # contributor | viewer only
+
 
 class MemberOut(BaseModel):
     user_id: UUID
@@ -55,11 +63,13 @@ class MemberOut(BaseModel):
     class Config:
         from_attributes = True
 
+
 class TransferOwnership(BaseModel):
     new_owner_id: UUID
 
+
 @router.post("", response_model=PackOut, status_code=status.HTTP_201_CREATED)
-def create_pack(
+async def create_pack(
     payload: PackCreate,
     db: Session = Depends(get_db),
 ):
@@ -75,23 +85,42 @@ def create_pack(
         db.rollback()
         raise HTTPException(status_code=409, detail="You already have a pack with that name")
     db.refresh(pack)
+    await cache_delete(f"packs:user:{payload.owner_id}")
     return pack
 
+
 @router.get("/{pack_id}", response_model=PackOut)
-def get_pack(
+async def get_pack(
     pack_id: UUID,
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
 ):
+    cache_key = f"pack:{pack_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        # Auth still requires a DB lookup; ownership is stored in the cached payload
+        # so we only hit the DB for membership check when the requester is not the owner.
+        pack = _get_pack_or_404(pack_id, db)
+        _require_role(requester_id, pack, db, "owner", "contributor", "viewer")
+        return cached
+
     pack = _get_pack_or_404(pack_id, db)
     _require_role(requester_id, pack, db, "owner", "contributor", "viewer")
-    return pack
+    out = PackOut.model_validate(pack).model_dump(mode="json")
+    await cache_set(cache_key, out)
+    return out
+
 
 @router.get("", response_model=list[PackOut])
-def list_packs(
+async def list_packs(
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
 ):
+    cache_key = f"packs:user:{requester_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     if not db.get(User, requester_id):
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -117,10 +146,13 @@ def list_packs(
         .all()
     )
 
-    return packs
+    out = [PackOut.model_validate(p).model_dump(mode="json") for p in packs]
+    await cache_set(cache_key, out)
+    return out
+
 
 @router.delete("/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_pack(
+async def delete_pack(
     pack_id: UUID,
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
@@ -129,9 +161,11 @@ def delete_pack(
     _require_role(requester_id, pack, db, "owner")
     db.delete(pack)
     db.commit()
+    await cache_delete(f"pack:{pack_id}", f"packs:user:{requester_id}")
+
 
 @router.post("/{pack_id}/members", response_model=MemberOut, status_code=status.HTTP_201_CREATED)
-def add_member(
+async def add_member(
     pack_id: UUID,
     payload: MemberAdd,
     requester_id: UUID = Query(...),
@@ -155,10 +189,13 @@ def add_member(
     db.add(membership)
     db.commit()
     db.refresh(membership)
+    # New member's pack list is now stale, as is the pack's own cached record.
+    await cache_delete(f"packs:user:{payload.user_id}", f"pack:{pack_id}")
     return membership
 
+
 @router.delete("/{pack_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_member(
+async def remove_member(
     pack_id: UUID,
     user_id: UUID,
     requester_id: UUID = Query(...),
@@ -173,9 +210,11 @@ def remove_member(
         raise HTTPException(status_code=404, detail="Membership not found")
     db.delete(membership)
     db.commit()
+    await cache_delete(f"packs:user:{user_id}", f"pack:{pack_id}")
+
 
 @router.post("/{pack_id}/transfer-ownership", response_model=PackOut)
-def transfer_ownership(
+async def transfer_ownership(
     pack_id: UUID,
     payload: TransferOwnership,
     requester_id: UUID = Query(...),
@@ -189,6 +228,8 @@ def transfer_ownership(
 
     if not db.get(User, payload.new_owner_id):
         raise HTTPException(status_code=404, detail="New owner user not found")
+
+    old_owner_id = pack.owner_id
 
     # if the new owner has an existing membership, remove it (they'll be owner via FK)
     existing = db.get(PackMembership, (payload.new_owner_id, pack_id))
@@ -205,4 +246,9 @@ def transfer_ownership(
     pack.owner_id = payload.new_owner_id
     db.commit()
     db.refresh(pack)
+    await cache_delete(
+        f"pack:{pack_id}",
+        f"packs:user:{old_owner_id}",
+        f"packs:user:{payload.new_owner_id}",
+    )
     return pack

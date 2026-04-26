@@ -12,4 +12,5 @@ dependencies = [
     "pydantic-settings>=2.2.1",
     "boto3>=1.34.0",
     "pydantic[email]>=2.12.5",
+    "redis[asyncio]>=5.0.0",
 ]
