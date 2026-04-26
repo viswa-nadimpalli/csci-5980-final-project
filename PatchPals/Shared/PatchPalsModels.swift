@@ -64,11 +64,13 @@ struct PackWebSocketEvent: Decodable {
     let eventType: String
     let packId: String
     let packVersion: Int
+    let serverTimestamp: String
 
     enum CodingKeys: String, CodingKey {
         case eventType = "event_type"
         case packId = "pack_id"
         case packVersion = "pack_version"
+        case serverTimestamp = "timestamp"
     }
 }
 
