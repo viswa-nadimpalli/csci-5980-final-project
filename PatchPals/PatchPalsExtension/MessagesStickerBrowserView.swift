@@ -4,7 +4,7 @@ import Combine
 import UIKit
 import OSLog
 
-private let signposter = OSSignposter(subsystem: "com.patchpals.cache", category: "StickerPackCache")
+private let signposter = OSSignposter(subsystem: "com.patchpals.cache", category: .pointsOfInterest)
 
 struct MessagesStickerBrowserView: View {
     @StateObject private var viewModel = MessagesStickerBrowserViewModel()

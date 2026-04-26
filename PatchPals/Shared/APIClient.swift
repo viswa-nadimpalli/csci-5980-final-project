@@ -2,7 +2,7 @@ import Foundation
 import UniformTypeIdentifiers
 import OSLog
 
-private let signposter = OSSignposter(subsystem: "com.patchpals.cache", category: "StickerPackCache")
+private let signposter = OSSignposter(subsystem: "com.patchpals.cache", category: .pointsOfInterest)
 
 struct APIError: LocalizedError {
     let detail: String
