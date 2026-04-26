@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 import UIKit
 import OSLog
 
-private let signposter = OSSignposter(subsystem: "com.patchpals.oldboy", category: "MessagesStickerBrowser")
+private let msSignposter = OSSignposter(subsystem: "com.patchpals.oldboy", category: "MessagesStickerBrowser")
 
 struct MessagesStickerBrowserView: View {
     @StateObject private var viewModel = MessagesStickerBrowserViewModel()
@@ -175,8 +175,8 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
     }
 
     func refresh() async {
-        let state = signposter.beginInterval("Refresh Sticker Packs", id: .exclusive)
-        defer { signposter.endInterval("Refresh Sticker Packs", state) }
+        let state = msSignposter.beginInterval("Refresh Sticker Packs", id: .exclusive)
+        defer { msSignposter.endInterval("Refresh Sticker Packs", state) }
 
         guard let userID = SessionStore.loggedInUserID else {
             needsSignIn = true
@@ -245,12 +245,12 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
     }
 
     private func loadStickers(for packID: String, userID: String) async {
-        let state = signposter.beginInterval("Load Stickers for Pack", id: .exclusive, "\(pack.id)")
+        let state = msSignposter.beginInterval("Load Stickers for Pack", id: .exclusive, "\(packID)")
         isLoadingPack = true
 
         defer {
             isLoadingPack = false
-            signposter.endInterval("Load Stickers for Pack", state)
+            msSignposter.endInterval("Load Stickers for Pack", state)
         }
 
         do {
