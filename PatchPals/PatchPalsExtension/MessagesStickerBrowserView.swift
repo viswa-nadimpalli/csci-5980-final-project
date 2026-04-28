@@ -29,6 +29,11 @@ struct MessagesStickerBrowserView: View {
         .task {
             await viewModel.load()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .patchPalsMessagesExtensionDidBecomeActive)) { _ in
+            Task {
+                await viewModel.refresh()
+            }
+        }
     }
 
     private var header: some View {
@@ -192,15 +197,28 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
 
         do {
             let loadedPacks = try await APIClient.shared.fetchPacks(requesterID: userID)
-            packs = loadedPacks
-            await loadCachedManifests(for: loadedPacks)
+            let serverVersions = try await APIClient.shared.fetchPackVersions(userID: userID)
+            let serverVersionMap = Dictionary(uniqueKeysWithValues: serverVersions.map { ($0.packId, $0.packVersion) })
+            let serverPackIDs = Set(serverVersions.map(\.packId))
+            let versionedPacks = loadedPacks
+                .filter { serverPackIDs.isEmpty || serverPackIDs.contains($0.id) }
+                .map { pack in
+                    var updatedPack = pack
+                    if let version = serverVersionMap[pack.id] {
+                        updatedPack.packVersion = version
+                    }
+                    return updatedPack
+                }
+
+            packs = versionedPacks
+            await loadCachedManifests(for: versionedPacks)
 
             if let selectedPackID,
-               let selectedPack = loadedPacks.first(where: { $0.id == selectedPackID }) {
+               let selectedPack = versionedPacks.first(where: { $0.id == selectedPackID }) {
                 await loadStickers(for: selectedPack, userID: userID)
             } else {
-                selectedPackID = loadedPacks.first?.id
-                if let firstPack = loadedPacks.first {
+                selectedPackID = versionedPacks.first?.id
+                if let firstPack = versionedPacks.first {
                     await loadStickers(for: firstPack, userID: userID)
                 }
             }
@@ -250,6 +268,8 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
         for pack in packs {
             if let cachedStickers = await stickerCache.cachedStickers(for: pack) {
                 stickerMap[pack.id] = cachedStickers
+            } else {
+                stickerMap.removeValue(forKey: pack.id)
             }
         }
     }
@@ -352,4 +372,8 @@ actor MessageStickerSender {
         let fileURL = try await StickerPackCache.shared.preparedFileURL(for: sticker)
         return try MSSticker(contentsOfFileURL: fileURL, localizedDescription: "PatchPals sticker")
     }
+}
+
+extension Notification.Name {
+    static let patchPalsMessagesExtensionDidBecomeActive = Notification.Name("patchPalsMessagesExtensionDidBecomeActive")
 }

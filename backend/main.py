@@ -18,11 +18,15 @@ def ensure_schema() -> None:
         return
 
     columns = {column["name"] for column in inspector.get_columns("sticker_packs")}
-    if "stickers_version" not in columns:
+    if "pack_version" not in columns:
         with engine.begin() as connection:
             connection.execute(
-                text("ALTER TABLE sticker_packs ADD COLUMN stickers_version INTEGER NOT NULL DEFAULT 0")
+                text("ALTER TABLE sticker_packs ADD COLUMN pack_version INTEGER NOT NULL DEFAULT 0")
             )
+            if "stickers_version" in columns:
+                connection.execute(
+                    text("UPDATE sticker_packs SET pack_version = stickers_version WHERE pack_version = 0")
+                )
 
 @app.on_event("startup")
 def startup():

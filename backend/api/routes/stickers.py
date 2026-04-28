@@ -82,7 +82,7 @@ def add_sticker(pack_id: UUID, payload: StickerCreate, db: Session = Depends(get
 
     sticker = Image(pack_id=pack_id, uploaded_by=payload.user_id, s3_key=payload.s3_key)
     db.add(sticker)
-    pack.stickers_version += 1
+    pack.pack_version += 1
     db.commit()
     db.refresh(sticker)
     return _sticker_out(sticker)
@@ -103,6 +103,6 @@ def delete_sticker(sticker_id: UUID, user_id: UUID = Query(...), db: Session = D
     _require_role(db, user_id, sticker.pack_id, "owner", "contributor")
     pack = db.get(StickerPack, sticker.pack_id)
     if pack:
-        pack.stickers_version += 1
+        pack.pack_version += 1
     db.delete(sticker)
     db.commit()

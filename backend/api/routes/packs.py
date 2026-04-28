@@ -7,7 +7,8 @@ from sqlalchemy import String, cast, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from core.db import get_db
-from core.models import PackMembership, PackRole, StickerPack, User
+from core.models import Image, PackMembership, PackRole, StickerPack, User
+from core.s3 import presigned_download_url
 
 router = APIRouter(prefix="/packs", tags=["packs"])
 
@@ -39,7 +40,27 @@ class PackOut(BaseModel):
     name: str
     description: str | None = None
     owner_id: UUID
-    stickers_version: int
+    pack_version: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class StickerOut(BaseModel):
+    id: UUID
+    pack_id: UUID
+    uploaded_by: UUID
+    s3_key: str
+    download_url: str
+
+
+class PackFullOut(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    owner_id: UUID
+    pack_version: int
+    stickers: list[StickerOut]
 
     class Config:
         from_attributes = True
@@ -120,6 +141,34 @@ def list_packs(
 
     return packs
 
+@router.get("/{pack_id}/full", response_model=PackFullOut)
+def get_pack_full(
+    pack_id: UUID,
+    requester_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+):
+    pack = _get_pack_or_404(pack_id, db)
+    _require_role(requester_id, pack, db, "owner", "contributor", "viewer")
+    images = db.query(Image).filter_by(pack_id=pack_id).order_by(Image.created_at.desc()).all()
+    stickers = [
+        StickerOut(
+            id=img.id,
+            pack_id=img.pack_id,
+            uploaded_by=img.uploaded_by,
+            s3_key=img.s3_key,
+            download_url=presigned_download_url(img.s3_key),
+        )
+        for img in images
+    ]
+    return PackFullOut(
+        id=pack.id,
+        name=pack.name,
+        description=pack.description,
+        owner_id=pack.owner_id,
+        pack_version=pack.pack_version,
+        stickers=stickers,
+    )
+
 @router.delete("/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_pack(
     pack_id: UUID,
@@ -154,6 +203,7 @@ def add_member(
 
     membership = PackMembership(user_id=payload.user_id, pack_id=pack_id, role=payload.role)
     db.add(membership)
+    pack.pack_version += 1
     db.commit()
     db.refresh(membership)
     return membership
@@ -173,6 +223,7 @@ def remove_member(
     if not membership:
         raise HTTPException(status_code=404, detail="Membership not found")
     db.delete(membership)
+    pack.pack_version += 1
     db.commit()
 
 @router.post("/{pack_id}/transfer-ownership", response_model=PackOut)
@@ -204,6 +255,7 @@ def transfer_ownership(
         db.add(PackMembership(user_id=pack.owner_id, pack_id=pack_id, role=PackRole.contributor))
 
     pack.owner_id = payload.new_owner_id
+    pack.pack_version += 1
     db.commit()
     db.refresh(pack)
     return pack

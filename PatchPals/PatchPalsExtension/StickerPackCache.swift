@@ -185,7 +185,7 @@ actor StickerPackCache {
     }
 
     private func version(for pack: Pack) -> Int {
-        pack.stickersVersion ?? 0
+        pack.packVersion
     }
 
     private func decoratedStickers(from manifest: CachedPackManifest) -> [Sticker] {
