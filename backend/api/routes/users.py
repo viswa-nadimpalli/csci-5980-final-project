@@ -1,7 +1,7 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from core.db import get_db
@@ -49,15 +49,20 @@ def get_pack_versions(user_id: UUID, db: Session = Depends(get_db)):
         .filter(PackMembership.user_id == user_id)
     )
 
-    from sqlalchemy import or_
+    user_hex = user_id.hex
+
     packs = (
         db.query(StickerPack)
         .filter(
             or_(
                 StickerPack.owner_id == user_id,
+                # Keep this consistent with /packs for deployments where UUIDs
+                # are surfaced as text with formatting differences.
+                func.lower(func.replace(cast(StickerPack.owner_id, String), "-", "")) == user_hex,
                 StickerPack.id.in_(membership_pack_ids),
             )
         )
+        .order_by(StickerPack.name.asc(), StickerPack.id.asc())
         .all()
     )
 

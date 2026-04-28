@@ -41,6 +41,7 @@ final class MessagesViewController: MSMessagesAppViewController {
     override func willBecomeActive(with conversation: MSConversation) {
         super.willBecomeActive(with: conversation)
         requestPresentationStyle(.expanded)
+        NotificationCenter.default.post(name: .patchPalsMessagesExtensionDidBecomeActive, object: nil)
     }
 
     @MainActor

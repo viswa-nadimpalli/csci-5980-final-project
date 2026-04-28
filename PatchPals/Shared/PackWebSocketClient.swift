@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// Connects to /ws/packs/{packID} and delivers decoded events on the main actor.
 /// Only one pack is subscribed at a time — call connect() to switch packs.

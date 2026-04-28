@@ -26,6 +26,11 @@ struct MessagesStickerBrowserView: View {
         .task {
             await viewModel.load()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .patchPalsMessagesExtensionDidBecomeActive)) { _ in
+            Task {
+                await viewModel.refresh()
+            }
+        }
     }
 
     private var header: some View {
@@ -256,6 +261,10 @@ final class MessagesStickerBrowserViewModel: ObservableObject {
                 selectedPackID = packs.first?.id
             }
 
+            if let selectedPackID {
+                await selectPack(selectedPackID)
+            }
+
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -405,4 +414,8 @@ actor MessageStickerSender {
         let fileURL = try await StickerPackCache.shared.preparedFileURL(for: sticker)
         return try MSSticker(contentsOfFileURL: fileURL, localizedDescription: "PatchPals sticker")
     }
+}
+
+extension Notification.Name {
+    static let patchPalsMessagesExtensionDidBecomeActive = Notification.Name("patchPalsMessagesExtensionDidBecomeActive")
 }
