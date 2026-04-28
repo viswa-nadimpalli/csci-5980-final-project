@@ -92,11 +92,13 @@ def get_upload_url(
 async def add_sticker(pack_id: UUID, payload: StickerCreate, db: Session = Depends(get_db)):
     """Register a sticker in the DB after the file has been uploaded to S3."""
     _require_role(db, payload.user_id, pack_id, "owner", "contributor")
+    pack = db.get(StickerPack, pack_id)
+    pack.pack_version += 1
     sticker = Image(pack_id=pack_id, uploaded_by=payload.user_id, s3_key=payload.s3_key)
     db.add(sticker)
     db.commit()
     db.refresh(sticker)
-    await cache_delete(f"pack:{pack_id}:stickers")
+    await cache_delete(f"pack:{pack_id}:stickers", f"pack:{pack_id}")
     return _sticker_out(sticker)
 
 
@@ -126,8 +128,10 @@ async def delete_sticker(sticker_id: UUID, user_id: UUID = Query(...), db: Sessi
     sticker = db.get(Image, sticker_id)
     if not sticker:
         raise HTTPException(status_code=404, detail="Sticker not found")
-    _require_role(db, user_id, sticker.pack_id, "owner", "contributor")
     pack_id = sticker.pack_id
+    _require_role(db, user_id, pack_id, "owner", "contributor")
+    pack = db.get(StickerPack, pack_id)
+    pack.pack_version += 1
     db.delete(sticker)
     db.commit()
-    await cache_delete(f"pack:{pack_id}:stickers")
+    await cache_delete(f"pack:{pack_id}:stickers", f"pack:{pack_id}")

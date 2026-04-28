@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from api.routes.health import router as health_router
 from api.routes.packs import router as packs_router
@@ -10,9 +12,23 @@ import core.models
 
 app = FastAPI(title="Sticker")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        conn.execute(text(
+            "ALTER TABLE sticker_packs "
+            "ADD COLUMN IF NOT EXISTS pack_version INTEGER NOT NULL DEFAULT 0"
+        ))
+        conn.commit()
 
 app.include_router(health_router)
 app.include_router(packs_router)
