@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from core.db import get_db
 from core.models import Image, PackMembership, PackRole, StickerPack, User
 from core.s3 import presigned_download_url
+from core.cache import cache_delete, cache_get, cache_set
 from api.routes.websocket import manager as ws_manager
 
 router = APIRouter(prefix="/packs", tags=["packs"])
@@ -83,7 +84,7 @@ class TransferOwnership(BaseModel):
     new_owner_id: UUID
 
 @router.post("", response_model=PackOut, status_code=status.HTTP_201_CREATED)
-def create_pack(
+async def create_pack(
     payload: PackCreate,
     db: Session = Depends(get_db),
 ):
@@ -99,23 +100,40 @@ def create_pack(
         db.rollback()
         raise HTTPException(status_code=409, detail="You already have a pack with that name")
     db.refresh(pack)
+    await cache_delete(f"packs:user:{payload.owner_id}")
     return pack
 
 @router.get("/{pack_id}", response_model=PackOut)
-def get_pack(
+async def get_pack(
     pack_id: UUID,
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
 ):
+    cache_key = f"pack:{pack_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        if str(requester_id) == cached["owner_id"]:
+            return cached
+        pack = _get_pack_or_404(pack_id, db)
+        _require_role(requester_id, pack, db, "contributor", "viewer")
+        return cached
+
     pack = _get_pack_or_404(pack_id, db)
     _require_role(requester_id, pack, db, "owner", "contributor", "viewer")
-    return pack
+    out = PackOut.model_validate(pack).model_dump(mode="json")
+    await cache_set(cache_key, out)
+    return out
 
 @router.get("", response_model=list[PackOut])
-def list_packs(
+async def list_packs(
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
 ):
+    cache_key = f"packs:user:{requester_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     if not db.get(User, requester_id):
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -141,7 +159,9 @@ def list_packs(
         .all()
     )
 
-    return packs
+    out = [PackOut.model_validate(p).model_dump(mode="json") for p in packs]
+    await cache_set(cache_key, out)
+    return out
 
 @router.get("/{pack_id}/full", response_model=PackFullOut)
 def get_pack_full(
@@ -173,7 +193,7 @@ def get_pack_full(
 
 
 @router.delete("/{pack_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_pack(
+async def delete_pack(
     pack_id: UUID,
     requester_id: UUID = Query(...),
     db: Session = Depends(get_db),
@@ -182,6 +202,7 @@ def delete_pack(
     _require_role(requester_id, pack, db, "owner")
     db.delete(pack)
     db.commit()
+    await cache_delete(f"pack:{pack_id}", f"packs:user:{requester_id}")
 
 @router.post("/{pack_id}/members", response_model=MemberOut, status_code=status.HTTP_201_CREATED)
 async def add_member(
@@ -210,6 +231,7 @@ async def add_member(
     pack.pack_version += 1
     db.commit()
     db.refresh(membership)
+    await cache_delete(f"packs:user:{payload.user_id}", f"pack:{pack_id}")
     background_tasks.add_task(
         ws_manager.broadcast_to_pack,
         str(pack_id),
@@ -240,6 +262,7 @@ async def remove_member(
     db.delete(membership)
     pack.pack_version += 1
     db.commit()
+    await cache_delete(f"packs:user:{user_id}", f"pack:{pack_id}")
     background_tasks.add_task(
         ws_manager.broadcast_to_pack,
         str(pack_id),
@@ -268,6 +291,8 @@ async def transfer_ownership(
     if not db.get(User, payload.new_owner_id):
         raise HTTPException(status_code=404, detail="New owner user not found")
 
+    old_owner_id = pack.owner_id
+
     # if the new owner has an existing membership, remove it (they'll be owner via FK)
     existing = db.get(PackMembership, (payload.new_owner_id, pack_id))
     if existing:
@@ -284,6 +309,7 @@ async def transfer_ownership(
     pack.pack_version += 1
     db.commit()
     db.refresh(pack)
+    await cache_delete(f"pack:{pack_id}", f"packs:user:{old_owner_id}", f"packs:user:{payload.new_owner_id}")
     background_tasks.add_task(
         ws_manager.broadcast_to_pack,
         str(pack_id),

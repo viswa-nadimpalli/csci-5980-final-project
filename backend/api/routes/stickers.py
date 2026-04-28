@@ -10,9 +10,13 @@ from core.db import get_db
 from core.models import Image, PackMembership, StickerPack
 from core.s3 import presigned_download_url, presigned_upload_url
 from core.config import settings
+from core.cache import cache_delete, cache_get, cache_set
 from api.routes.websocket import manager as ws_manager
 
 router = APIRouter(tags=["stickers"])
+
+# Kept below PRESIGN_EXPIRES_SECONDS so cached s3_keys can always produce a fresh presigned URL.
+_STICKER_CACHE_TTL = 120
 
 
 class UploadUrlOut(BaseModel):
@@ -89,6 +93,7 @@ async def add_sticker(
     db.add(sticker)
     db.commit()
     db.refresh(sticker)
+    await cache_delete(f"pack:{pack_id}:stickers", f"pack:{pack_id}")
     background_tasks.add_task(
         ws_manager.broadcast_to_pack,
         str(pack_id),
@@ -103,9 +108,24 @@ async def add_sticker(
 
 
 @router.get("/packs/{pack_id}/stickers", response_model=list[StickerOut])
-def list_stickers(pack_id: UUID, user_id: UUID = Query(...), db: Session = Depends(get_db)):
+async def list_stickers(pack_id: UUID, user_id: UUID = Query(...), db: Session = Depends(get_db)):
     _require_role(db, user_id, pack_id, "owner", "contributor", "viewer")
+
+    cache_key = f"pack:{pack_id}:stickers"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return [
+            StickerOut(download_url=presigned_download_url(e["s3_key"]), **e)
+            for e in cached
+        ]
+
     images = db.query(Image).filter_by(pack_id=pack_id).order_by(Image.created_at.desc()).all()
+    to_store = [
+        {"id": str(img.id), "pack_id": str(img.pack_id),
+         "uploaded_by": str(img.uploaded_by), "s3_key": img.s3_key}
+        for img in images
+    ]
+    await cache_set(cache_key, to_store, ttl=_STICKER_CACHE_TTL)
     return [_sticker_out(img) for img in images]
 
 
@@ -125,6 +145,7 @@ async def delete_sticker(
     pack.pack_version += 1
     db.delete(sticker)
     db.commit()
+    await cache_delete(f"pack:{pack_id}:stickers", f"pack:{pack_id}")
     background_tasks.add_task(
         ws_manager.broadcast_to_pack,
         str(pack_id),
